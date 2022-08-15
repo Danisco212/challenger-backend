@@ -1,5 +1,7 @@
 package com.danielisaac.challengerbackend.entities;
 
+import com.danielisaac.challengerbackend.models.RegisterRequest;
+
 import javax.persistence.*;
 
 @Entity
@@ -19,6 +21,15 @@ public class User {
     private String phone;
 
     private String profilePic;
+
+    public User() {
+    }
+
+    public User(RegisterRequest registerRequest) {
+        this.setEmail(registerRequest.getEmail());
+        this.setPassword(registerRequest.getPassword());
+        this.setUsername(registerRequest.getUsername());
+    }
 
     public Long getUserId() {
         return userId;

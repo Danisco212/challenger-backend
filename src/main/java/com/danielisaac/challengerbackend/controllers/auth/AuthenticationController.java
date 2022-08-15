@@ -1,5 +1,8 @@
 package com.danielisaac.challengerbackend.controllers.auth;
 
+import com.danielisaac.challengerbackend.entities.User;
+import com.danielisaac.challengerbackend.models.RegisterRequest;
+import com.danielisaac.challengerbackend.repositories.UserRepository;
 import com.danielisaac.challengerbackend.services.jwt.JwtUtil;
 import com.danielisaac.challengerbackend.models.LoginRequest;
 import com.danielisaac.challengerbackend.models.LoginResponse;
@@ -9,11 +12,15 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
 
 @RestController
 public class AuthenticationController {
@@ -26,19 +33,54 @@ public class AuthenticationController {
     @Autowired
     JwtUtil jwtTokenUtil;
 
+    @Autowired
+    UserRepository userRepository;
+
+    @Autowired
+    PasswordEncoder passwordEncoder;
+
     @RequestMapping(value = "/login", method = RequestMethod.POST)
-    public ResponseEntity<?> createAuthenticationToken(@RequestBody LoginRequest loginRequest) throws Exception {
+    public ResponseEntity<?> createAuthenticationToken(@RequestBody LoginRequest loginRequest) {
         try {
             authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword())
             );
-        } catch (BadCredentialsException e){
-            throw new Exception("Incorrect username or password", e);
+        } catch (BadCredentialsException e) {
+            return loginFailed();
         }
-        final UserDetails userDetails = userDetailService.loadUserByUsername(loginRequest.getUsername());
-        final String jwt = jwtTokenUtil.generateToken(userDetails);
+        Optional<User> user = userRepository.findUserByUsername(loginRequest.getUsername());
+        if (user.isPresent()) {
+            final String jwt = jwtTokenUtil.generateToken(user.get());
+            return ResponseEntity.ok(new LoginResponse(jwt));
+        }
+        return loginFailed();
+    }
 
-        return ResponseEntity.ok(new LoginResponse(jwt));
+    @RequestMapping(value = "/register", method = RequestMethod.POST)
+    public ResponseEntity<?> createAccount(@RequestBody RegisterRequest registerRequest) {
+        Optional<User> mUser = userRepository.findUserByUsername(registerRequest.getUsername());
+        if (mUser.isPresent()) {
+            // username exists
+            return fieldExists("Username");
+        }
+        registerRequest.setPassword(passwordEncoder.encode(registerRequest.getPassword()));
+        User user = new User(registerRequest);
+        userRepository.save(user);
+        return createAuthenticationToken(new LoginRequest(user.getUsername(), user.getPassword()));
+    }
+
+    private ResponseEntity<?> loginFailed() {
+        Map<String, Object> response = new HashMap<>();
+        response.put("message", "Incorrect username of password");
+        response.put("success", false);
+        return ResponseEntity.ok(response);
+    }
+
+    private ResponseEntity<?> fieldExists(String field) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("message", field + " already exists");
+        response.put("success", false);
+        return ResponseEntity.ok(response);
     }
 
 }
